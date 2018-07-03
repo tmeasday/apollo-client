@@ -3932,6 +3932,69 @@ describe('QueryManager', () => {
           error: error => done.fail(error),
         });
     });
+    it('will update on `resetStore`, even if query originally errored (react-apollo#2070)', done => {
+      const query = gql`
+        query {
+          author {
+            firstName
+            lastName
+          }
+        }
+      `;
+
+      const errors = [new GraphQLError('foo')];
+      const data = {
+        author: {
+          firstName: 'John',
+          lastName: 'Smith 2',
+        },
+      };
+      const queryManager = mockQueryManager(
+        { request: { query }, result: { errors } },
+        { request: { query }, result: { data } }
+      );
+
+      const observable = queryManager.watchQuery({ query });
+      observable.subscribe({
+        next: () => done.fail(new Error('First subscription should immediately error')),
+        error: receivedError => {
+          expect(receivedError.graphQLErrors).toEqual(errors);
+
+          let count = 0;
+          // This is dodgy thing that react-apollo does to keep a subscription open
+          // even after the first subscription has errored. Subscriptions can only
+          // ever error once so we need to recreate it. See
+          //   https://github.com/apollographql/react-apollo/blob/4e6c589b192a49f808945998b7daba4499b34d8b/src/Query.tsx#L348-L356
+          const lastError = observable.getLastError();
+          const lastResult = observable.getLastResult();
+          observable.resetLastResults();
+          observable.subscribe({
+            next: result => {
+              switch (count++) {
+                case 0:
+                  expect(result.loading).toBe(true);
+                  done();
+                  break;
+                case 1:
+                  expect(result.loading).toBe(false);
+                  expect(stripSymbols(result.data)).toEqual(data);
+                  done();
+                  break;
+                default:
+                  done.fail(new Error('`next` was called to many times.'));
+              }
+            },
+            error: () => done.fail(new Error('Second subscription should not error'))
+          })
+          Object.assign(observable, { lastError, lastResult });
+
+          // Now reset the store
+          setTimeout(() => {
+            queryManager.resetStore();
+          }, 0);
+        }
+      });
+    });
   });
   describe('refetchQueries', () => {
     const oldWarn = console.warn;

@@ -468,6 +468,7 @@ export class QueryManager<TStore> {
       // }
 
       const networkStatusChanged = Boolean(
+        // (lastResult || lastError) &&
         lastResult &&
           queryStoreValue.networkStatus !== lastResult.networkStatus,
       );
@@ -477,6 +478,17 @@ export class QueryManager<TStore> {
         (lastError && lastError.graphQLErrors) !==
           queryStoreValue.graphQLErrors &&
         errorPolicy !== 'none';
+
+
+      // The problem is that lastError is actually null because of the hackery that
+      // react-apollo does.
+      console.log({
+        lastError,
+        lastResult,
+        networkStatus: queryStoreValue.networkStatus,
+        networkStatusChanged,
+        errorStatusChanged
+      })
 
       if (
         !isNetworkRequestInFlight(queryStoreValue.networkStatus) ||
